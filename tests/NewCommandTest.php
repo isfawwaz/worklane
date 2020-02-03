@@ -28,8 +28,7 @@ class NewCommandTest extends TestCase {
             'db_name' => 'test',
             'db_user' => 'test',
             'db_password' => 'test',
-            'name' => $scaffoldDirectoryName,
-            '--auth' => null
+            'name' => $scaffoldDirectoryName
         ]);
 
         $this->assertEquals($statusCode, 0);
