@@ -20,16 +20,16 @@
         }
     ],
     "bin": [
-        "bin/laravel"
+        "bin/worklane"
     ],
     "autoload": {
         "psr-4": {
-            "Laravel\\Installer\\Console\\": "src/"
+            "Worklane\\Installer\\Console\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Laravel\\Installer\\Console\\Tests\\": "tests/"
+            "Worklane\\Installer\\Console\\Tests\\": "tests/"
         }
     },
     "extra": {
@@ -39,6 +39,9 @@
     },
     "config": {
         "sort-packages": true
+    },
+    "suggest": {
+        "wp-cli": "For manage and utilizing the project"
     },
     "minimum-stability": "dev",
     "prefer-stable": true
