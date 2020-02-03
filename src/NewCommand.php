@@ -168,6 +168,9 @@ class NewCommand extends Command {
 
         if ($process->isSuccessful()) {
             $output->writeln('<comment>Project ready! Build something amazing.</comment>');
+            $output->writeln('<info>Admin information:</info>');
+            $output->writeln('<info>Username: paperplane</info>');
+            $output->writeln('<info>Password: shrimp@909</info>');
         }
 
         return 0;
