@@ -1,7 +1,6 @@
 <?php
 namespace Worklane\Installer\Console;
 
-use GuzzleHttp\Client;
 use RuntimeException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -11,9 +10,21 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
-use ZipArchive;
+use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class NewCommand extends Command {
+
+    protected $inputName = 'dev-wordpress';
+
+    protected $inputUrl = null;
+
+    protected $inputTitle = null;
+
+    protected $inputDatabaseName = null;
+
+    protected $inputDatabaseUser = null;
+
+    protected $inputDatabasePassword = null;
 
     /**
      * Configure the command options.
@@ -23,13 +34,13 @@ class NewCommand extends Command {
     protected function configure() {
         $this->setName('new')
             ->setDescription('Create new wordpress work')
-            ->addArgument('url', InputArgument::REQUIRED)
-            ->addArgument('title', InputArgument::REQUIRED)
-            ->addArgument('db_name', InputArgument::REQUIRED)
-            ->addArgument('db_user', InputArgument::REQUIRED)
-            ->addArgument('db_password', InputArgument::REQUIRED)
-            ->addArgument('name', InputArgument::OPTIONAL)
-            ->addOption('force', 'f', InputOption::VALUE_NONE, 'Forces install even if the directory already exists');;
+            ->addArgument('name', InputArgument::OPTIONAL, "Folder name", "dev-wordpress")
+            ->addOption('url', 'u', InputOption::VALUE_REQUIRED, 'Your site url, example: site.test')
+            ->addOption('title', 't', InputOption::VALUE_REQUIRED, 'Your site title with quotes, example: "Site Title"')
+            ->addOption('db_name', 'B', InputOption::VALUE_REQUIRED, 'Your database name')
+            ->addOption('db_user', 'U', InputOption::VALUE_REQUIRED, 'Your database username, example: root')
+            ->addOption('db_password', 'P', InputOption::VALUE_OPTIONAL, 'Your database password, can be empty')
+            ->addOption('force', 'f', InputOption::VALUE_NONE, 'Forces install even if the directory already exists');
     }
 
     /**
@@ -40,20 +51,46 @@ class NewCommand extends Command {
      * @return int
      */
     protected function execute(InputInterface $input, OutputInterface $output) {
+        $this->inputName = $input->getArgument('name');
 
-        if (! extension_loaded('zip')) {
-            throw new RuntimeException('The Zip PHP extension is not installed. Please install it and try again.');
+        $this->inputUrl = $input->getOption('url');
+        $this->inputTitle = addslashes( $input->getOption('title') );
+
+        $this->inputDatabaseName = $input->getOption('db_name');
+        $this->inputDatabaseUser = $input->getOption('db_user');
+        $this->inputDatabasePassword = $input->getOption('db_password');
+
+        if( empty($this->inputUrl) ) {
+            throw new RuntimeException('Please fill out your project site url. Example: --url=site.test');
         }
 
-        $name = $input->getArgument('name');
+        if( empty($this->inputTitle) ) {
+            throw new RuntimeException('Please fill out your project site title. Example: --title="Site Title"');
+        }
 
-        $siteUrl = $input->getArgument('url');
-        $siteTitle = $input->getArgument('title');
+        if( empty($this->inputDatabaseName) ) {
+            throw new RuntimeException('Please fill out your project database name. Example: --db_name=test');
+        }
 
-        $DBName = $input->getArgument('db_name');
-        $DBUser = $input->getArgument('db_user');
-        $DBPassword = $input->getArgument('db_password');
+        if( empty( $this->inputDatabaseUser ) ) {
+            throw new RuntimeException('Please fill out your project database user. Example: --db_user=root');
+        }
 
+        if( strtolower($this->inputDatabasePassword) == 'null' ) {
+            $this->inputDatabasePassword = null;
+        }
+
+        // Check composer exists
+        if( !$this->verifyCommand('composer') ) {
+            throw new RuntimeException('Composer not installed');
+        }
+
+        // Check WP-CLI
+        if( !$this->verifyCommand('wp') ) {
+            throw new RuntimeException('WP-CLI not installed');
+        }
+
+        $name = $this->inputName;
         $directory = $name && $name !== '.' ? getcwd().'/'.$name : getcwd();
 
         if (! $input->getOption('force')) {
@@ -70,9 +107,83 @@ class NewCommand extends Command {
 
         $output->writeln(sprintf('<info>Directory %s succesfully  created</info>', $directory));
 
-        $output->writeln('<info>Crafting website...</info>');
+        $output->writeln('<info>Crafting project...</info>');
 
-        /** START OF DOWNLOADING PROJECT */
+        /**
+         *  START OF DOWNLOADING PROJECT
+         */
+        $process = $this->downloadRepository( $directory, $input, $output );
+
+        /**
+         * START OF CREATING CONFIG
+         */
+        $this->createConfig( $directory, $filesystem, $output );
+
+        /**
+         * START OF INSTALLING WORDPRESS
+         */
+        $this->installWordpress( $directory, $output );
+
+        /**
+         * START OF ACTIVATING THEME
+         */
+        $this->activatingTheme( $directory, $output );
+
+        /**
+         * START OF GENERATE SHALTS
+         */
+        $this->generateSalt( $directory, $output );
+
+        if ($process) {
+            $output->writeln('<comment>Project ready! Build something amazing.</comment>');
+            $output->writeln('<info>Admin information:</info>');
+            $output->writeln('<info>Username: paperplane</info>');
+            $output->writeln('<info>Password: shrimp@909</info>');
+        }
+
+        return 0;
+    }
+
+    /**
+     * Verify that the application does not already exist.
+     *
+     * @param  string  $directory
+     * @return void
+     */
+    protected function verifyApplicationDoesntExist($directory)
+    {
+        if ((is_dir($directory) || is_file($directory)) && $directory != getcwd()) {
+            throw new RuntimeException('Project already exists!');
+        }
+    }
+
+    /**
+     * Get the composer command for the environment.
+     *
+     * @return string
+     */
+    protected function findComposer()
+    {
+        $composerPath = getcwd().'/composer.phar';
+
+        if (file_exists($composerPath)) {
+            return '"'.PHP_BINARY.'" '.$composerPath;
+        }
+
+        return 'composer';
+    }
+
+    protected function findWpCli() {
+        return 'wp-cli';
+    }
+
+    protected function verifyCommand($command) :bool {
+        $windows = strpos(PHP_OS, 'WIN') === 0;
+        $test = $windows ? 'where' : 'command -v';
+        return is_executable(trim(shell_exec("$test $command")));
+    }
+
+    protected function downloadRepository( $directory, $input, $output ) {
 
         $composer = $this->findComposer();
 
@@ -98,47 +209,69 @@ class NewCommand extends Command {
             $process->setTty(true);
         }
 
-        $process->run(function ($type, $line) use ($output) {
-            $output->write($line);
-        });
+        try {
+            $process->mustRun();
 
-        /** END OF DOWNLOADING PROJECT */
+            echo $process->getOutput();
+        } catch (ProcessFailedException $exception) {
+            echo $exception->getMessage();
+            die();
+        }
 
-        /** START OF CREATING CONFIG */
+        $output->writeln('<info>Crafting done!</info>');
+        $this->addDash( $output );
 
-        $output->writeln('<comment>Creating config...</comment>');
+        if ($process->isSuccessful()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function createConfig( $directory, $filesystem, $output ) {
+
+        $output->writeln('<comment>Updating config...</comment>');
 
         $filesystem->copy( $directory . '/example-dynamic-config.php', $directory . '/local-config.php');
 
         $content = file_get_contents( $directory . '/example-dynamic-config.php' );
 
-        $content = str_replace( "DATABASE_NAME", $DBName, $content );
+        $content = str_replace( "DATABASE_NAME", $this->inputDatabaseName, $content );
 
-        $content = str_replace( "DATABASE_USER", $DBUser, $content );
+        $content = str_replace( "DATABASE_USER", $this->inputDatabaseUser, $content );
 
-        $content = str_replace( "DATABASE_PASSWORD", $DBPassword, $content );
+        $content = str_replace( "DATABASE_PASSWORD", $this->inputDatabasePassword, $content );
 
         $filesystem->dumpFile( $directory . '/local-config.php', $content );
 
         $output->writeln('<info>Config done!</info>');
 
-        /** END OF CREATING CONFIG */
+        $this->addDash( $output );
 
-        /** START OF INSTALL WORDPPRESS */
+    }
+
+    protected function installWordpress( $directory, $output ) {
 
         $output->writeln('<comment>Installing to database...</comment>');
 
-        $install = Process::fromShellCommandline('wp core install --url='. $siteUrl .' --title='. $siteTitle .' --admin_user=paperplane --admin_password=shrimp@909 --admin_email=developer@paperplane.id', $directory, null, null, null);
+        $install = Process::fromShellCommandline('wp core install --url='. $this->inputUrl .' --title="'. $this->inputTitle .'" --admin_user=paperplane --admin_password=shrimp@909 --admin_email=developer@paperplane.id', $directory, null, null, null);
 
-        $install->run(function ($type, $line) use ($output) {
-            $output->write($line);
-        });
+        try {
+            $install->mustRun();
+
+            echo $install->getOutput();
+        } catch (ProcessFailedException $exception) {
+            echo $exception->getMessage();
+            die();
+        }
 
         $output->writeln('<info>Installing done!</info>');
 
-        /** END OF INSTALL WORDPRESS */
+        $this->addDash( $output );
 
-        /** START OF ACTIVATING THEME & PLUGINS */
+    }
+
+    protected function activatingTheme( $directory, $output ) {
 
         $output->writeln('<comment>Activating theme & plugins...</comment>');
 
@@ -150,9 +283,11 @@ class NewCommand extends Command {
 
         $output->writeln('<info>Activating done!</info>');
 
-        /** END OF ACTIVATING */
+        $this->addDash( $output );
 
-        /** START OF GENERATING NEW SALT */
+    }
+
+    protected function generateSalt( $directory, $output ) {
 
         $output->writeln('<comment>Generating new salts...</comment>');
 
@@ -164,67 +299,11 @@ class NewCommand extends Command {
 
         $output->writeln('<info>Generating done!</info>');
 
-        /** END OF GENERATING */
+        $this->addDash( $output );
 
-        if ($process->isSuccessful()) {
-            $output->writeln('<comment>Project ready! Build something amazing.</comment>');
-            $output->writeln('<info>Admin information:</info>');
-            $output->writeln('<info>Username: paperplane</info>');
-            $output->writeln('<info>Password: shrimp@909</info>');
-        }
-
-        return 0;
     }
 
-    /**
-     * Verify that the application does not already exist.
-     *
-     * @param  string  $directory
-     * @return void
-     */
-    protected function verifyApplicationDoesntExist($directory)
-    {
-        if ((is_dir($directory) || is_file($directory)) && $directory != getcwd()) {
-            throw new RuntimeException('Project already exists!');
-        }
-    }
-
-    /**
-     * Get the version that should be downloaded.
-     *
-     * @param  \Symfony\Component\Console\Input\InputInterface  $input
-     * @return string
-     */
-    protected function getVersion(InputInterface $input)
-    {
-        if ($input->getOption('dev')) {
-            return 'develop';
-        }
-
-        if ($input->getOption('auth')) {
-            return 'auth';
-        }
-
-        return 'master';
-    }
-
-    /**
-     * Get the composer command for the environment.
-     *
-     * @return string
-     */
-    protected function findComposer()
-    {
-        $composerPath = getcwd().'/composer.phar';
-
-        if (file_exists($composerPath)) {
-            return '"'.PHP_BINARY.'" '.$composerPath;
-        }
-
-        return 'composer';
-    }
-
-    protected function findWpCli() {
-        return 'wp-cli';
+    protected function addDash( $output ) {
+        $output->writeln('----------------------------------------------------------');
     }
 }
