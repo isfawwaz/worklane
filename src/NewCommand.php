@@ -57,50 +57,50 @@ class NewCommand extends Command {
         $directory = $name && $name !== '.' ? getcwd().'/'.$name : getcwd();
 
         if (! $input->getOption('force')) {
-            // $this->verifyApplicationDoesntExist($directory);
+            $this->verifyApplicationDoesntExist($directory);
         }
 
         $filesystem = new Filesystem();
 
-        // try {
-        //     $filesystem->mkdir( $directory );
-        // } catch( IOExceptionInterface $exception ) {
-        //     $output->writeln('An error occurred while creating your directory at ' . $exception->getPath());
-        // }
+        try {
+            $filesystem->mkdir( $directory );
+        } catch( IOExceptionInterface $exception ) {
+            $output->writeln('An error occurred while creating your directory at ' . $exception->getPath());
+        }
 
-        // $output->writeln(sprintf('<info>Directory %s succesfully  created</info>', $directory));
+        $output->writeln(sprintf('<info>Directory %s succesfully  created</info>', $directory));
 
-        // $output->writeln('<info>Crafting website...</info>');
+        $output->writeln('<info>Crafting website...</info>');
 
-        // /** START OF DOWNLOADING PROJECT */
+        /** START OF DOWNLOADING PROJECT */
 
-        // $composer = $this->findComposer();
+        $composer = $this->findComposer();
 
-        // $commands = [
-        //     $composer . " create-project paperplane/dev-wordpress . --repository='". '{"type": "gitlab", "url": "https://gitlab.com/paper-plane/dev-wordpress.git"}'. "'",
-        // ];
+        $commands = [
+            $composer . " create-project paperplane/dev-wordpress . --repository='". '{"type": "gitlab", "url": "https://gitlab.com/paper-plane/dev-wordpress.git"}'. "'",
+        ];
 
-        // if ($input->getOption('no-ansi')) {
-        //     $commands = array_map(function ($value) {
-        //         return $value.' --no-ansi';
-        //     }, $commands);
-        // }
+        if ($input->getOption('no-ansi')) {
+            $commands = array_map(function ($value) {
+                return $value.' --no-ansi';
+            }, $commands);
+        }
 
-        // if ($input->getOption('quiet')) {
-        //     $commands = array_map(function ($value) {
-        //         return $value.' --quiet';
-        //     }, $commands);
-        // }
+        if ($input->getOption('quiet')) {
+            $commands = array_map(function ($value) {
+                return $value.' --quiet';
+            }, $commands);
+        }
 
-        // $process = Process::fromShellCommandline(implode(' && ', $commands), $directory, null, null, null);
+        $process = Process::fromShellCommandline(implode(' && ', $commands), $directory, null, null, null);
 
-        // if ('\\' !== DIRECTORY_SEPARATOR && file_exists('/dev/tty') && is_readable('/dev/tty')) {
-        //     $process->setTty(true);
-        // }
+        if ('\\' !== DIRECTORY_SEPARATOR && file_exists('/dev/tty') && is_readable('/dev/tty')) {
+            $process->setTty(true);
+        }
 
-        // $process->run(function ($type, $line) use ($output) {
-        //     $output->write($line);
-        // });
+        $process->run(function ($type, $line) use ($output) {
+            $output->write($line);
+        });
 
         /** END OF DOWNLOADING PROJECT */
 
@@ -166,9 +166,9 @@ class NewCommand extends Command {
 
         /** END OF GENERATING */
 
-        // if ($process->isSuccessful()) {
-        //     $output->writeln('<comment>Project ready! Build something amazing.</comment>');
-        // }
+        if ($process->isSuccessful()) {
+            $output->writeln('<comment>Project ready! Build something amazing.</comment>');
+        }
 
         return 0;
     }
