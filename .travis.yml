@@ -8,6 +8,7 @@ php:
 
 before_install:
   - phpenv config-rm xdebug.ini || true
+  - composer config --global --auth gitlab-token.gitlab.com uZXkekz-AfYfR-P3UcjG
 
 install:
   - travis_retry composer install --no-interaction --prefer-dist
