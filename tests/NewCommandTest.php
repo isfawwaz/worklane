@@ -23,11 +23,11 @@ class NewCommandTest extends TestCase {
         $tester = new CommandTester($app->find('new'));
 
         $statusCode = $tester->execute([
-            'url' => 'test.test',
-            'title' => '"Testing Ajah"',
-            'db_name' => 'test',
-            'db_user' => 'test',
-            'db_password' => 'test',
+            '--url' => 'test.test',
+            '--title' => '"Testing Ajah"',
+            '--db_name' => 'test',
+            '--db_user' => 'test',
+            '--db_password' => 'test',
             'name' => $scaffoldDirectoryName
         ]);
 
